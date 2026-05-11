@@ -1,5 +1,5 @@
 Flask
 gunicorn
 requests
-PyPDF2
+pypdf
 reportlab

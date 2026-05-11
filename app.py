@@ -9,7 +9,7 @@ from datetime import datetime, date
 
 import requests
 from flask import Flask, render_template, request, send_file, Response
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
