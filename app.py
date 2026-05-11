@@ -14,6 +14,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# Регистрируем шрифт Liberation Serif (обычный, кириллический)
+pdfmetrics.registerFont(TTFont('LiberationSerif', '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf'))
+
 app = Flask(__name__)
 
 BANK_PATH = Path("bank")
@@ -75,7 +81,7 @@ def add_header_to_pdf(input_pdf_path, output_pdf_path, header_text):
     writer = PdfWriter()
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
-    can.setFont("Helvetica", 10)
+    can.setFont("LiberationSerif", 10)
     can.drawCentredString(A4[0] / 2, A4[1] - 15 * mm, header_text)
     can.save()
     packet.seek(0)
