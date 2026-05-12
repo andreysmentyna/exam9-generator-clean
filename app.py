@@ -2,18 +2,16 @@ import os
 import random
 import zipfile
 import tempfile
-import io
+import subprocess
 import json
 from pathlib import Path
 from datetime import datetime, date
 
 import requests
 from flask import Flask, render_template, request, send_file, Response
-from pypdf import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from docx import Document
+from docx.shared import Pt
+from docxcompose.composer import Composer
 
 app = Flask(__name__)
 
@@ -30,11 +28,7 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# Шрифт с кириллицей (уже установлен в Dockerfile)
-FONT_PATH = "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
-pdfmetrics.registerFont(TTFont('LiberationSerif', FONT_PATH))
-
-# ---------- Счётчик ----------
+# ---------- Счётчик и статистика ----------
 def get_counter_data():
     resp = requests.get(API_URL, headers=HEADERS)
     resp.raise_for_status()
@@ -72,7 +66,25 @@ def get_stats():
     total = data["value"]
     return {"today": today_count, "month": month_count, "total": total}
 
-# ---------- Заголовок варианта ----------
+# ---------- Конвертация docx → pdf (LibreOffice) ----------
+def docx_to_pdf(docx_path, output_pdf_path):
+    cmd = [
+        "libreoffice", "--headless", "--convert-to", "pdf",
+        "--outdir", str(output_pdf_path.parent),
+        str(docx_path)
+    ]
+    for attempt in range(2):
+        try:
+            subprocess.run(cmd, check=True, timeout=120)
+            expected_pdf = output_pdf_path.parent / (docx_path.stem + ".pdf")
+            if expected_pdf.exists():
+                os.rename(expected_pdf, output_pdf_path)
+                return
+        except Exception:
+            if attempt == 1:
+                raise RuntimeError("LibreOffice conversion failed")
+
+# ---------- Заголовки вариантов ----------
 def determine_header(selected_tasks):
     if not selected_tasks:
         return "Вариант №"
@@ -89,18 +101,14 @@ def determine_header(selected_tasks):
     nums = sorted(selected_tasks)
     return f"Вариант № (задания {', '.join(map(str, nums))})"
 
-def create_title_page(text):
-    """Создаёт одностраничный PDF с заголовком."""
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=A4)
-    c.setFont("LiberationSerif", 14)
-    c.drawCentredString(A4[0] / 2, A4[1] - 30, text)
-    c.showPage()
-    c.save()
-    packet.seek(0)
-    return PdfReader(packet).pages[0]
+def add_title_paragraph(master, text):
+    para = master.add_paragraph()
+    run = para.add_run(text)
+    run.bold = True
+    run.font.size = Pt(14)
+    return para
 
-# ---------- Генерация ----------
+# ---------- Генерация вариантов ----------
 def compose_variants(k, selected_tasks, preview=False, merge=False):
     task_dirs = sorted(
         [d for d in BANK_PATH.iterdir() if d.is_dir() and d.name.startswith("task_")],
@@ -108,18 +116,18 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
     )
     filtered_dirs = [d for d in task_dirs if int(d.name.split("_")[1]) in selected_tasks]
     if not filtered_dirs:
-        raise Exception("No tasks selected")
+        raise Exception("Не выбрано ни одного задания")
 
     all_tasks = []
     for task_dir in filtered_dirs:
-        pdf_files = sorted(
-            [f for f in task_dir.glob("variant_*.pdf")],
+        docx_files = sorted(
+            [f for f in task_dir.glob("variant_*.docx")],
             key=lambda x: int(x.stem.split("_")[1])
         )
-        if not pdf_files:
-            raise Exception(f"No PDF variants in {task_dir.name}")
-        random.shuffle(pdf_files)
-        all_tasks.append(pdf_files)
+        if not docx_files:
+            raise Exception(f"В папке {task_dir.name} нет docx-файлов")
+        random.shuffle(docx_files)
+        all_tasks.append(docx_files)
 
     if not preview:
         start_global_id = get_global_counter(k)
@@ -128,50 +136,50 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        result_pdfs = []   # пути к PDF-файлам вариантов
+        result_files = []
 
         for exam_idx in range(k):
             global_id = start_global_id + exam_idx
-            writer = PdfWriter()
+            master = Document()
+            composer = Composer(master)
 
-            # Титульная страница
             title = f"{determine_header(selected_tasks)} {global_id}"
             if preview:
                 title += " (ПРИМЕР)"
-            writer.add_page(create_title_page(title))
+            add_title_paragraph(master, title)
 
-            # Добавляем страницы заданий
             for variants_list in all_tasks:
                 variant_file = variants_list[exam_idx % len(variants_list)]
-                reader = PdfReader(str(variant_file))
-                for page in reader.pages:
-                    writer.add_page(page)
+                sub_doc = Document(str(variant_file))
+                composer.append(sub_doc)
 
-            # Сохраняем вариант
-            variant_pdf = tmpdir_path / f"variant_{global_id}.pdf"
-            with open(variant_pdf, "wb") as f:
-                writer.write(f)
-            result_pdfs.append(variant_pdf)
+            docx_path = tmpdir_path / f"variant_{global_id}.docx"
+            master.save(str(docx_path))
 
-        # --- Режим объединения или ZIP ---
+            if merge:
+                result_files.append(str(docx_path))
+            else:
+                pdf_path = tmpdir_path / f"variant_{global_id}.pdf"
+                docx_to_pdf(str(docx_path), str(pdf_path))
+                result_files.append(str(pdf_path))
+
         if merge:
-            # Объединяем все варианты в один PDF (каждый с титульной страницей)
-            merged_writer = PdfWriter()
-            for pdf_path in result_pdfs:
-                reader = PdfReader(str(pdf_path))
-                for page in reader.pages:
-                    merged_writer.add_page(page)
-            merged_pdf = tmpdir_path / "merged_variants.pdf"
-            with open(merged_pdf, "wb") as f:
-                merged_writer.write(f)
+            merged_doc = Document()
+            merged_composer = Composer(merged_doc)
+            for doc_path in result_files:
+                merged_composer.append(Document(doc_path))
+            merged_docx = tmpdir_path / "merged.docx"
+            merged_doc.save(str(merged_docx))
+            merged_pdf = tmpdir_path / "merged.pdf"
+            docx_to_pdf(str(merged_docx), str(merged_pdf))
             final_path = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             merged_pdf.rename(final_path)
             return final_path
         else:
             zip_path = tmpdir_path / "variants.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
-                for pdf_path in result_pdfs:
-                    zf.write(pdf_path, arcname=Path(pdf_path).name)
+                for file_path in result_files:
+                    zf.write(file_path, arcname=Path(file_path).name)
             final_zip = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
             zip_path.rename(final_zip)
             return final_zip
