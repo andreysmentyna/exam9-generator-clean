@@ -68,10 +68,8 @@ def get_stats():
 
 # ---------- Конвертация docx → pdf ----------
 def docx_to_pdf(docx_path, output_pdf_path):
-    # Приводим к Path, если переданы строки
     docx_path = Path(docx_path)
     output_pdf_path = Path(output_pdf_path)
-
     cmd = [
         "libreoffice", "--headless", "--convert-to", "pdf",
         "--outdir", str(output_pdf_path.parent),
@@ -140,7 +138,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        result_files = []
+        result_files = []   # список Path к PDF (или docx при merge)
 
         for exam_idx in range(k):
             global_id = start_global_id + exam_idx
@@ -151,6 +149,8 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             if preview:
                 title += " (ПРИМЕР)"
             add_title_paragraph(master, title)
+            # После титула – новая страница для начала заданий
+            master.add_page_break()
 
             for variants_list in all_tasks:
                 variant_file = variants_list[exam_idx % len(variants_list)]
@@ -161,24 +161,30 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             master.save(str(docx_path))
 
             if merge:
-                result_files.append(docx_path)   # сохраняем Path
+                result_files.append(docx_path)     # сохраняем Path для объединения
             else:
                 pdf_path = tmpdir_path / f"variant_{global_id}.pdf"
-                docx_to_pdf(docx_path, pdf_path)  # передаём Path
+                docx_to_pdf(docx_path, pdf_path)
                 result_files.append(pdf_path)
 
+        # --- Финальная сборка: ZIP или объединённый PDF ---
         if merge:
             merged_doc = Document()
             merged_composer = Composer(merged_doc)
+            first = True
             for doc_path in result_files:
+                if not first:
+                    # Разрыв страницы перед следующим вариантом
+                    merged_doc.add_page_break()
                 merged_composer.append(Document(str(doc_path)))
+                first = False
             merged_docx = tmpdir_path / "merged.docx"
             merged_doc.save(str(merged_docx))
             merged_pdf = tmpdir_path / "merged.pdf"
-            docx_to_pdf(merged_docx, merged_pdf)  # Path
+            docx_to_pdf(merged_docx, merged_pdf)
             final_path = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             merged_pdf.rename(final_path)
-            return final_path
+            return final_path, start_global_id
         else:
             zip_path = tmpdir_path / "variants.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
@@ -186,7 +192,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
                     zf.write(file_path, arcname=file_path.name)
             final_zip = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
             zip_path.rename(final_zip)
-            return final_zip
+            return final_zip, start_global_id
 
 # ---------- Маршруты ----------
 @app.route("/")
@@ -212,13 +218,24 @@ def generate():
         if not all(1 <= t <= 18 for t in selected_tasks):
             return "Некорректный номер задания", 400
 
-        result_file = compose_variants(k, selected_tasks, preview=False, merge=merge)
-        if merge:
-            return send_file(result_file, as_attachment=True,
-                             download_name="exam_variants.pdf", mimetype="application/pdf")
+        result_file, start_id = compose_variants(k, selected_tasks, preview=False, merge=merge)
+
+        # Формируем имя файла в зависимости от количества и режима
+        if k == 1:
+            # Один вариант
+            base_name = f"exam-var-{start_id}"
         else:
+            # Несколько вариантов
+            base_name = f"exam-vars-{start_id}-{start_id + k - 1}"
+
+        if merge:
+            download_name = f"{base_name}.pdf"
             return send_file(result_file, as_attachment=True,
-                             download_name="exam_variants.zip")
+                             download_name=download_name, mimetype="application/pdf")
+        else:
+            download_name = f"{base_name}.zip"
+            return send_file(result_file, as_attachment=True,
+                             download_name=download_name)
     except Exception as e:
         app.logger.error(f"Generate error: {e}")
         return f"Ошибка при генерации: {e}", 500
@@ -231,7 +248,7 @@ def preview():
             return "Не выбрано ни одного задания", 400
         if not all(1 <= t <= 18 for t in selected_tasks):
             return "Некорректный номер задания", 400
-        result_file = compose_variants(1, selected_tasks, preview=True, merge=False)
+        result_file, _ = compose_variants(1, selected_tasks, preview=True, merge=False)
         with zipfile.ZipFile(result_file, "r") as zf:
             pdf_name = zf.namelist()[0]
             pdf_data = zf.read(pdf_name)
