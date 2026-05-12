@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
-# Путь к папке с заданиями ( docx )
+# Путь к папке с заданиями ( .docx )
 BANK_PATH = Path("bank")
 GIST_ID = os.environ.get("GIST_ID")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
@@ -97,10 +97,10 @@ def docx_to_pdf(docx_path, output_pdf_path):
     # Пытаемся создать временный профиль в RAM-диске для максимальной скорости.
     # Если не получается (например, /dev/shm отсутствует), используем обычный /tmp.
     try:
-        tmp_profile = tempfile.mkdtemp(prefix="libre_", dir="/dev/shm")
+        tmp_profile = Path(tempfile.mkdtemp(prefix="libre_", dir="/dev/shm"))
         app.logger.info("LibreOffice будет использовать профиль в /dev/shm (RAM)")
     except Exception:
-        tmp_profile = tempfile.mkdtemp(prefix="libre_")
+        tmp_profile = Path(tempfile.mkdtemp(prefix="libre_"))
         app.logger.info("Не удалось использовать /dev/shm, профиль в /tmp")
 
     env = os.environ.copy()
@@ -132,7 +132,7 @@ def docx_to_pdf(docx_path, output_pdf_path):
         raise RuntimeError(f"Ошибка конвертации LibreOffice: {e}")
     finally:
         # Удаляем временный профиль, чтобы не засорять память
-        shutil.rmtree(tmp_profile, ignore_errors=True)
+        shutil.rmtree(str(tmp_profile), ignore_errors=True)
 
 # ---------- Умные заголовки вариантов ----------
 def determine_header(selected_tasks):
