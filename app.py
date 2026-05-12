@@ -138,7 +138,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        result_files = []   # список Path к PDF (или docx при merge)
+        result_files = []
 
         for exam_idx in range(k):
             global_id = start_global_id + exam_idx
@@ -148,9 +148,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             title = f"{determine_header(selected_tasks)} {global_id}"
             if preview:
                 title += " (ПРИМЕР)"
-            add_title_paragraph(master, title)
-            # После титула – новая страница для начала заданий
-            master.add_page_break()
+            add_title_paragraph(master, title)   # заголовок на той же странице, без разрыва
 
             for variants_list in all_tasks:
                 variant_file = variants_list[exam_idx % len(variants_list)]
@@ -161,21 +159,19 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             master.save(str(docx_path))
 
             if merge:
-                result_files.append(docx_path)     # сохраняем Path для объединения
+                result_files.append(docx_path)
             else:
                 pdf_path = tmpdir_path / f"variant_{global_id}.pdf"
                 docx_to_pdf(docx_path, pdf_path)
                 result_files.append(pdf_path)
 
-        # --- Финальная сборка: ZIP или объединённый PDF ---
         if merge:
             merged_doc = Document()
             merged_composer = Composer(merged_doc)
             first = True
             for doc_path in result_files:
                 if not first:
-                    # Разрыв страницы перед следующим вариантом
-                    merged_doc.add_page_break()
+                    merged_doc.add_page_break()   # разрыв перед следующим вариантом
                 merged_composer.append(Document(str(doc_path)))
                 first = False
             merged_docx = tmpdir_path / "merged.docx"
@@ -220,12 +216,9 @@ def generate():
 
         result_file, start_id = compose_variants(k, selected_tasks, preview=False, merge=merge)
 
-        # Формируем имя файла в зависимости от количества и режима
         if k == 1:
-            # Один вариант
             base_name = f"exam-var-{start_id}"
         else:
-            # Несколько вариантов
             base_name = f"exam-vars-{start_id}-{start_id + k - 1}"
 
         if merge:
