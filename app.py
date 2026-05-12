@@ -66,8 +66,12 @@ def get_stats():
     total = data["value"]
     return {"today": today_count, "month": month_count, "total": total}
 
-# ---------- Конвертация docx → pdf (LibreOffice) ----------
+# ---------- Конвертация docx → pdf ----------
 def docx_to_pdf(docx_path, output_pdf_path):
+    # Приводим к Path, если переданы строки
+    docx_path = Path(docx_path)
+    output_pdf_path = Path(output_pdf_path)
+
     cmd = [
         "libreoffice", "--headless", "--convert-to", "pdf",
         "--outdir", str(output_pdf_path.parent),
@@ -157,21 +161,21 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             master.save(str(docx_path))
 
             if merge:
-                result_files.append(str(docx_path))
+                result_files.append(docx_path)   # сохраняем Path
             else:
                 pdf_path = tmpdir_path / f"variant_{global_id}.pdf"
-                docx_to_pdf(str(docx_path), str(pdf_path))
-                result_files.append(str(pdf_path))
+                docx_to_pdf(docx_path, pdf_path)  # передаём Path
+                result_files.append(pdf_path)
 
         if merge:
             merged_doc = Document()
             merged_composer = Composer(merged_doc)
             for doc_path in result_files:
-                merged_composer.append(Document(doc_path))
+                merged_composer.append(Document(str(doc_path)))
             merged_docx = tmpdir_path / "merged.docx"
             merged_doc.save(str(merged_docx))
             merged_pdf = tmpdir_path / "merged.pdf"
-            docx_to_pdf(str(merged_docx), str(merged_pdf))
+            docx_to_pdf(merged_docx, merged_pdf)  # Path
             final_path = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             merged_pdf.rename(final_path)
             return final_path
@@ -179,7 +183,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             zip_path = tmpdir_path / "variants.zip"
             with zipfile.ZipFile(zip_path, "w") as zf:
                 for file_path in result_files:
-                    zf.write(file_path, arcname=Path(file_path).name)
+                    zf.write(file_path, arcname=file_path.name)
             final_zip = Path(tempfile.gettempdir()) / f"variants_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
             zip_path.rename(final_zip)
             return final_zip
