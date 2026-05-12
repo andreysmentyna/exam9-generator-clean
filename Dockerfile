@@ -1,12 +1,14 @@
 FROM python:3.11-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends gnupg wget && \
-    echo "deb http://download.documentfoundation.org/libreoffice/stable/24.2/deb/ bookworm main" > /etc/apt/sources.list.d/libreoffice.list && \
-    wget -qO - https://download.documentfoundation.org/libreoffice/stable/24.2/deb/Release.key | apt-key add - && \
+# Устанавливаем LibreOffice 24.2 из официальных Debian Backports
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" >> /etc/apt/sources.list && \
     apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends -t bookworm-backports \
         libreoffice-writer \
         libreoffice-math \
+    && \
+    # Устанавливаем шрифты для кириллицы и математических символов
+    apt-get install -y --no-install-recommends \
         fonts-liberation \
         fonts-symbola \
         fontconfig && \
