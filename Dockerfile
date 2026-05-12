@@ -25,4 +25,4 @@ COPY . .
 ENV PORT 10000
 EXPOSE 10000
 
-CMD ["gunicorn", "app:app", "-b", "0.0.0.0:10000"]
+CMD ["gunicorn", "app:app", "-b", "0.0.0.0:10000", "--timeout", "600"]
