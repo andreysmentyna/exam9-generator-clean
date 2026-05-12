@@ -280,13 +280,14 @@ def generate():
     try:
         k = int(request.form.get("quantity", 0))
         merge = request.form.get("merge") == "1"
+        force_zip = request.form.get("force_zip") == "1"
 
-        if k < 1 or k > 50:
-            return "Количество вариантов должно быть от 1 до 50", 400
+        if k < 1 or k > 30:
+            return "Количество вариантов должно быть от 1 до 30", 400
 
         # Для большого числа вариантов принудительно включаем объединение,
-        # чтобы избежать множества отдельных конвертаций и возможного таймаута.
-        if k > 20 and not merge:
+        # если пользователь не выбрал медленный ZIP
+        if k > 20 and not merge and not force_zip:
             merge = True
             app.logger.info(f"Автоматически включено объединение для {k} вариантов")
 

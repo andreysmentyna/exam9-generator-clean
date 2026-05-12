@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Генератор экзаменационных вариантов</title>
+    <title>Генератор экзаменационных вариантов (из банка заданий ЦЭКО ПМР)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         body {
@@ -57,10 +57,23 @@
         .btn-preview:hover { background: #2980b9; }
         .feedback { margin-top: 40px; font-size: 14px; color: #7f8c8d; }
         input[type=number] { width: 70px; padding: 6px; }
+        .note {
+            font-size: 0.9em;
+            color: #555;
+            margin-top: 5px;
+        }
+        #slow-zip-option {
+            display: none;
+            margin-top: 8px;
+            background: #fff3cd;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ffc107;
+        }
     </style>
 </head>
 <body>
-    <h1><i class="fas fa-file-alt"></i> Генератор вариантов</h1>
+    <h1><i class="fas fa-file-alt"></i> Генератор вариантов <small>(из банка заданий ЦЭКО ПМР)</small></h1>
 
     <div class="stats">
         <div class="stat-item"><i class="fas fa-calendar-check"></i> Сегодня: <span>{{ stats.today }}</span></div>
@@ -87,16 +100,25 @@
         </div>
 
         <p>
-            <label for="quantity">Количество вариантов (1–50):</label>
-            <input type="number" id="quantity" name="quantity" min="1" max="50" value="1" required>
+            <label for="quantity">Количество вариантов (1–30):</label>
+            <input type="number" id="quantity" name="quantity" min="1" max="30" value="1" required onchange="handleQuantityChange()" oninput="handleQuantityChange()">
         </p>
 
-<p>
-  <label>
-    <input type="checkbox" name="merge" value="1">
-    Объединить все варианты в один PDF-файл
-  </label>
-</p>
+        <p>
+            <label>
+                <input type="checkbox" name="merge" value="1" id="merge-checkbox">
+                Объединить все варианты в один PDF-файл
+            </label>
+            <br>
+            <small class="note">(более 20 вариантов автоматически объединяются)</small>
+        </p>
+
+        <div id="slow-zip-option">
+            <label>
+                <input type="checkbox" name="force_zip" value="1" id="force-zip-checkbox">
+                Скачать отдельными файлами (ZIP) — <strong>медленно</strong>, может занять несколько минут
+            </label>
+        </div>
 
         <div class="actions">
             <button type="submit" class="btn-generate"><i class="fas fa-download"></i> Сгенерировать и скачать</button>
@@ -105,7 +127,7 @@
     </form>
 
     <div class="feedback">
-        <p>Нашли ошибку или есть предложения? <a href="mailto:andreysmentyna@gmail.com">andreysmentyna@gmail.com</a></p>
+        <p>Нашли ошибку или есть предложения? <a href="mailto:teacher@example.com">teacher@example.com</a></p>
     </div>
 
     <script>
@@ -124,6 +146,29 @@
                 if (selected.includes(parseInt(cb.value))) cb.checked = true;
             });
         }
+
+        function handleQuantityChange() {
+            const qty = parseInt(document.getElementById('quantity').value);
+            const slowZipOption = document.getElementById('slow-zip-option');
+            const mergeCheckbox = document.getElementById('merge-checkbox');
+            
+            if (qty > 20) {
+                slowZipOption.style.display = 'block';
+                if (!document.getElementById('force-zip-checkbox').checked) {
+                    mergeCheckbox.checked = true;
+                }
+            } else {
+                slowZipOption.style.display = 'none';
+            }
+        }
+
+        document.getElementById('force-zip-checkbox').addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('merge-checkbox').checked = false;
+            } else {
+                document.getElementById('merge-checkbox').checked = true;
+            }
+        });
 
         function previewVariant() {
             const form = document.getElementById('generator-form');
