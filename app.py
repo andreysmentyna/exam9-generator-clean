@@ -28,7 +28,7 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# ---------- Счётчик и статистика ----------
+# ---------- Счётчик ----------
 def get_counter_data():
     resp = requests.get(API_URL, headers=HEADERS)
     resp.raise_for_status()
@@ -66,7 +66,7 @@ def get_stats():
     total = data["value"]
     return {"today": today_count, "month": month_count, "total": total}
 
-# ---------- Конвертация docx → pdf ----------
+# ---------- Конвертация ----------
 def docx_to_pdf(docx_path, output_pdf_path):
     docx_path = Path(docx_path)
     output_pdf_path = Path(output_pdf_path)
@@ -77,7 +77,7 @@ def docx_to_pdf(docx_path, output_pdf_path):
     ]
     for attempt in range(2):
         try:
-            subprocess.run(cmd, check=True, timeout=120)
+            subprocess.run(cmd, check=True, timeout=300)
             expected_pdf = output_pdf_path.parent / (docx_path.stem + ".pdf")
             if expected_pdf.exists():
                 os.rename(expected_pdf, output_pdf_path)
@@ -86,7 +86,7 @@ def docx_to_pdf(docx_path, output_pdf_path):
             if attempt == 1:
                 raise RuntimeError("LibreOffice conversion failed")
 
-# ---------- Заголовки вариантов ----------
+# ---------- Заголовки ----------
 def determine_header(selected_tasks):
     if not selected_tasks:
         return "Вариант №"
@@ -110,7 +110,7 @@ def add_title_paragraph(master, text):
     run.font.size = Pt(14)
     return para
 
-# ---------- Генерация вариантов ----------
+# ---------- Генерация ----------
 def compose_variants(k, selected_tasks, preview=False, merge=False):
     task_dirs = sorted(
         [d for d in BANK_PATH.iterdir() if d.is_dir() and d.name.startswith("task_")],
@@ -148,7 +148,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             title = f"{determine_header(selected_tasks)} {global_id}"
             if preview:
                 title += " (ПРИМЕР)"
-            add_title_paragraph(master, title)   # заголовок на той же странице, без разрыва
+            add_title_paragraph(master, title)
 
             for variants_list in all_tasks:
                 variant_file = variants_list[exam_idx % len(variants_list)]
@@ -171,7 +171,7 @@ def compose_variants(k, selected_tasks, preview=False, merge=False):
             first = True
             for doc_path in result_files:
                 if not first:
-                    merged_doc.add_page_break()   # разрыв перед следующим вариантом
+                    merged_doc.add_page_break()
                 merged_composer.append(Document(str(doc_path)))
                 first = False
             merged_docx = tmpdir_path / "merged.docx"
@@ -208,6 +208,11 @@ def generate():
         merge = request.form.get("merge") == "1"
         if k < 1 or k > 50:
             return "Количество вариантов должно быть от 1 до 50", 400
+
+        # Принудительное объединение для больших запросов
+        if k > 20 and not merge:
+            merge = True
+
         selected_tasks = [int(t) for t in request.form.getlist("task")]
         if not selected_tasks:
             return "Не выбрано ни одного задания", 400
