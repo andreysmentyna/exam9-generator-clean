@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Устанавливаем шрифты Liberation (кириллица)
+# Устанавливаем шрифты Liberation (для кириллицы на титульной странице)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends fonts-liberation fontconfig && \
     fc-cache -fv && \
